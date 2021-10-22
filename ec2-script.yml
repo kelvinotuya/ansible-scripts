@@ -1,0 +1,57 @@
+---
+- hosts: localhost
+  become: true
+  gather_facts: false
+
+vars:
+  region: us-west-2
+  instance_type: t2.micro
+  ami: ami-5b673c34 # RedHat Linux 7.5
+  hosts_file: /etc/ansible/hosts
+
+tasks:
+ - name: Create security group
+ ec2_group:
+  aws_access_key: <access key>
+  aws_secret_key: <Secret key>
+  name: "proComputing"
+  description: "Pro Computing Security Group"
+  region: "{{ region }}"
+  rules:
+    - proto: tcp
+      from_port: 22
+      to_port: 22
+      cidr_ip: 0.0.0.0/0
+
+- name: Create an EC2 key
+  ec2_key:
+   aws_access_key: <access key>
+   aws_secret_key: <Secret key>
+   name: "proComputing"
+   region: "{{ region }}"
+  register: ec2_key
+- name: Save private key (PEM file)
+  copy: content="{{ec2_key.key.private_key}}" dest=/home/ansible/proComputing.pem mode=0600
+  when: ec2_key.changed
+- name: Create an ec2 instance
+   ec2:
+    aws_access_key: <access key>
+    aws_secret_key: <secret key>
+    key_name: proComputing
+    group: proComputing # security group name
+    instance_type: "{{ instance_type}}"
+    image: "{{ ami }}"
+    wait: true
+    region: "{{ region }}"
+    count: 1 # default
+    count_tag:
+      Name: Demo
+    instance_tags:
+      Name: Demo
+  register: ec2
+- name: Save IP to inventory file
+  lineinfile:
+    dest: "{{hosts_file}}"
+    insertafter: '\[webservers\]'
+    line: "{{item.private_ip}}"
+  with_items: "{{ec2.instances}}"
